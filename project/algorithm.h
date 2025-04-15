@@ -35,6 +35,9 @@ typedef struct LineType
 void FreeImage(PixelImage** P);
 void CreateImage(PixelImage** PI,uint16_t width,uint16_t height);
 void CreatePoint(PixelPoint** PP,uint32_t capacity);
+void EnsureCapacity(PixelPoint* PP);
 void FreePoint(PixelPoint** PP);
-
+void CreateNode(Coordinate start,Coordinate end,char type,uint16_t length,Line* L);
+void FreeLine(Line* L);
+void DeleteLineNode(Line* node,Line* head);
 #endif

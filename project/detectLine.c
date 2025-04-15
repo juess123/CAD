@@ -2,6 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <math.h>
+#define PI 3.141592653589793
+#define MIN_RADIUS 8
+#define MAX_RADIUS 20
+#define MATCH_THRESHOLD 0.6  // 至少 80% 的点匹配才算圆
 Line* InitLineHead(void)
 {
     Line* L=(Line*)malloc(sizeof(Line));
@@ -10,62 +15,8 @@ Line* InitLineHead(void)
     L->next_=NULL;
     L->pre_=NULL;
 }
-void CreateNode(Coordinate start,Coordinate end,char type,uint16_t length,Line* L)
-{
-    if(L==NULL)return;
-    Line* node=(Line*)malloc(sizeof(Line));
-    node->end_=end;
-    node->start_=start;
-    node->length_=length;
-    node->type_=type;
-    if (L->next_ == NULL)
-    {
-        node->next_=L->next_;
-        node->pre_=L;
-        L->next_=node;
-    }
-    else
-    {
-        node->next_=L->next_;
-        node->pre_=L;
-        L->next_->pre_=node;
-        L->next_=node;
-    }
-    L->length_++;
-}
-void FreeList(Line* L)
-{
-    if (L == NULL) return;
 
-    Line* current = L->next_;
-    Line* temp;
 
-    while (current != NULL)
-    {
-        temp = current;
-        current = current->next_;
-        free(temp);
-    }
-
-    L->next_ = NULL; 
-    L->length_ = 0;  
-}
-void FreeNode(Line* L)
-{
-    if (L == NULL) return;  // 防止空指针
-
-    Line* current = L->next_;  // 从第一个节点开始
-    while (current != NULL) 
-    {
-        Line* temp = current;  // 保存当前节点
-        current = current->next_;  // 移动到下一个节点
-        free(temp);  // 释放当前节点的内存
-    }
-
-    L->next_ = NULL;  // 清空头节点的 next 指针
-    L->length_ = 0;  // 重置链表长度
-    free(L);
-}
 int compareX(const void* a, const void* b)
 {
     const Coordinate* pa = (const Coordinate*)a;
@@ -141,10 +92,10 @@ uint8_t isHorizontalRepeatLine(Line* line1,Line* line2)
     if(shortLine->end_.x_>=longline->start_.x_ && shortLine->end_.x_<=longline->end_.x_) return 1;
     return 0;
 }
-void RemoveLines(Coordinate* Co, uint16_t deleteNum,uint16_t start)
+void RemoveLines(Coordinate* Co, uint32_t deleteNum,uint32_t start)
 {
-    uint16_t num=start+deleteNum;
-    for(int i=start;i<num;i++)
+    uint32_t num=start+deleteNum;
+    for(uint32_t i=start;i<num;i++)
     {
         Co[i].x_=0;
         Co[i].y_=0;
@@ -242,7 +193,7 @@ void FindHorizontalLine(PixelPoint* targetImg,Line* horizontalLine)
                 length=targetImg->co_[i].x_-targetImg->co_[i - count].x_;
                 if(length==count)
                 {
-                    lineSymbol='l';
+                    lineSymbol='L';
                 }
                 else
                 {
@@ -272,7 +223,7 @@ void FindVerticalLine(PixelPoint* target,Line* verticalLine)
                 length=target->co_[i].y_-target->co_[i - count].y_;
                 if(length==count)
                 {
-                    lineSymbol='l';
+                    lineSymbol='L';
                 }
                 else
                 {
@@ -284,38 +235,37 @@ void FindVerticalLine(PixelPoint* target,Line* verticalLine)
         }
     }
 }
-void WriteStraigLine(Line* Vline,Line* Hline)
+void WriteStraigLine(Line* Vline,Line* Hline,PixelPoint* p)
 {
     Line *vL=Vline->next_;
     Line *hL=Hline->next_;
-    FILE *file = fopen("./StraightLine.txt", "w");
-    if (file == NULL) {
-        printf("Error opening file!\n");
-        return;
-    }
     for (int i = 0;i<Vline->length_; i++)
     {
         
         for(int j=0;j<vL->length_;j++)
         {
-            fprintf(file, "%d,%d\n",vL->start_.x_,vL->start_.y_+j); 
+            p->co_[p->size_].y_=vL->start_.y_+j;
+            p->co_[p->size_++].x_=vL->start_.x_;
+            EnsureCapacity(p);
         }
         vL=vL->next_;
     }
+    
     for (int i = 0;i<Hline->length_; i++)
     {
         
         for(int j=0;j<hL->length_;j++)
         {
-            fprintf(file, "%d,%d\n",hL->start_.x_+j,hL->start_.y_);
+            p->co_[p->size_].y_=hL->start_.y_;
+            p->co_[p->size_++].x_=hL->start_.x_+j;
+            EnsureCapacity(p);
         }
         hL=hL->next_;
     }
-    fclose(file);
 }
 void WriteLsp(Line* v,Line* h)
 {
-    FILE *file = fopen("./line.txt", "w");
+    FILE *file = fopen("/www/wwwroot/python/CADpython/results/line.txt", "w");
     if (file == NULL) {
         printf("Error opening file!\n");
         return;
@@ -364,8 +314,8 @@ void BreakVerLine(Line* verLine,Line* headHorLine,Line* breakLinehead)
     p->size_++;
     while(line!=NULL)
     {
-        if(line->start_.x_<verLine->start_.x_ && line->end_.x_>verLine->start_.x_ 
-            && line->start_.y_>verLine->start_.y_ && line->end_.y_<verLine->end_.y_)
+        if(line->start_.x_<=verLine->start_.x_ && line->end_.x_>=verLine->start_.x_ 
+            && line->start_.y_>=verLine->start_.y_ && line->end_.y_<=verLine->end_.y_)
         {
             Coordinate temp={0};
             temp.x_=verLine->start_.x_;
@@ -379,8 +329,10 @@ void BreakVerLine(Line* verLine,Line* headHorLine,Line* breakLinehead)
     for(int i=0;i<p->size_;i++)
     {
         length=p->co_[i].y_-p->co_[i+1].y_;
-        if(length>10)CreateNode(p->co_[i],p->co_[i+1],'\0',length,breakLinehead);
+        if(length>5)CreateNode(p->co_[i],p->co_[i+1],'\0',length,breakLinehead);
     }
+
+
     FreePoint(&p);
 }
 
@@ -397,8 +349,8 @@ void BreakHorLine(Line* horLine,Line* headverLine,Line* breakVerLinehead)
     p->size_++;
     while(line!=NULL)
     {
-        if(line->start_.x_>horLine->start_.x_ && line->end_.x_<horLine->end_.x_ 
-            && line->start_.y_<horLine->start_.y_ && line->end_.y_>horLine->end_.y_)
+        if(line->start_.x_>=horLine->start_.x_ && line->end_.x_<=horLine->end_.x_ 
+            && line->start_.y_<=horLine->start_.y_ && line->end_.y_>=horLine->end_.y_)
         {
             Coordinate temp={0};
             temp.x_=line->start_.x_;
@@ -412,8 +364,9 @@ void BreakHorLine(Line* horLine,Line* headverLine,Line* breakVerLinehead)
     for(int i=0;i<p->size_;i++)
     {
         length=p->co_[i].x_-p->co_[i+1].x_;
-        if(length>10)CreateNode(p->co_[i],p->co_[i+1],'\0',length,breakVerLinehead);
+        if(length>5)CreateNode(p->co_[i],p->co_[i+1],'\0',length,breakVerLinehead);
     }
+
     FreePoint(&p); 
 }
 void BreakLineHandle(Line* verLineHead,Line* horLineHead)
@@ -434,10 +387,10 @@ void BreakLineHandle(Line* verLineHead,Line* horLineHead)
         l1=l1->next_;
     }
     WriteLsp(breakVerLinehead->next_,breakHorLinehead->next_);
-    FreeNode(breakHorLinehead);
-    FreeNode(breakVerLinehead);
+    FreeLine(breakHorLinehead);
+    FreeLine(breakVerLinehead);
 }
-void LineHandle(PixelPoint* targetImg,LineType* line)
+PixelPoint* LineHandle(PixelPoint* targetImg,LineType* line)
 {
     Line* verticalLine=InitLineHead();
     SortX(targetImg);                      //x从小到大,y值在每个x中从小到大
@@ -456,20 +409,36 @@ void LineHandle(PixelPoint* targetImg,LineType* line)
     //Line* l2=horizontalLine->next_;
 
     // //DeleteVirtualLine(horizontalLine);
-    DeleteHorizontalRepeatLine(horizontalLine);
     // //DeleteVirtualLine(verticalLine);
+    uint32_t num=0;
+    Line* l1=verticalLine->next_;
+    while(l1!=NULL)
+    {
+        num+=l1->length_;
+        l1=l1->next_;
+    }
+    l1=horizontalLine->next_;
+    while(l1!=NULL)
+    {
+        num+=l1->length_;
+        l1=l1->next_;
+    }
+    //printf("%u,%u,%.2f%%\n",targetImg->size_,num,(num/(float)targetImg->size_*100));
+    DeleteHorizontalRepeatLine(horizontalLine);
+    
     DeleteVerticalRepeatLine(verticalLine);
-    //WriteLsp(verticalLine->next_,horizontalLine->next_);
+    WriteLsp(verticalLine->next_,horizontalLine->next_);
 
 
 
 
     
+    PixelPoint* p=NULL;
+    CreatePoint(&p,100000);
+    WriteStraigLine(verticalLine,horizontalLine,p);
     
-    //WriteStraigLine(verticalLine,horizontalLine);
-   
 
-    BreakLineHandle(verticalLine,horizontalLine);
+    //BreakLineHandle(verticalLine,horizontalLine);
 
 
 
@@ -480,14 +449,57 @@ void LineHandle(PixelPoint* targetImg,LineType* line)
     printf("------horizontalLine line num is %d\n", horizontalLine->length_);
     line->horLine_=horizontalLine;
     line->verLine_=verticalLine;
+    p->capacity_=num;/*借用pp->capacity_的这个参数  此时p的容量表示  直线所占用像素点的个数，
+    由于pp->capacity_在后面没有用到,且p后面被释放，因次借用这个内存位置存储一个变量,送出函数,注意这种写法是不健康的，不规范的25-4-12*/
+    return p;
 }
+
+void KeepCommonPoints(PixelPoint* targetImg, PixelPoint* p1, PixelPoint* p2) {
+    PixelPoint* result = NULL;
+    CreatePoint(&result, targetImg->capacity_); // 创建结果点集
+    uint32_t i = 0, j = 0;
+    while (i < p1->size_ && j < p2->size_) {
+        Coordinate a = p1->co_[i];
+        Coordinate b = p2->co_[j];
+        if (a.y_ < b.y_ || (a.y_ == b.y_ && a.x_ < b.x_)) {
+            i++;
+        } else if (a.y_ > b.y_ || (a.y_ == b.y_ && a.x_ > b.x_)) {
+            j++;
+        } else {
+            // 找到相同的点
+            result->co_[result->size_++] = a;
+            i++;
+            j++;
+        }
+    }
+
+    // 替换 targetImg 的内容
+    targetImg->size_ = result->size_;
+    for (uint32_t k = 0; k < result->size_; ++k) {
+        targetImg->co_[k] = result->co_[k];
+    }
+    free(result->co_);
+    free(result);
+}
+
 void RemoveAllLine(PixelPoint* targetImg)
 {
-    SortX(targetImg);
-    int count = 0;
-    for (int i = 0; i < (int)targetImg->size_ - 1; i++)
+    PixelPoint *p1=NULL,*p2=NULL;
+    CreatePoint(&p1,targetImg->size_);
+    p1->size_ = targetImg->size_;
+    for (uint32_t i = 0; i < targetImg->size_; ++i) {
+        p1->co_[i] = targetImg->co_[i];
+    }
+    CreatePoint(&p2,targetImg->size_);
+    p2->size_ = targetImg->size_;
+    for (uint32_t i = 0; i < targetImg->size_; ++i) {
+        p2->co_[i] = targetImg->co_[i];
+    }
+    SortX(p1);
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < targetImg->size_; i++)
     {
-        if(targetImg->co_[i].x_ == targetImg->co_[i + 1].x_ && targetImg->co_[i].y_ == targetImg->co_[i + 1].y_ - 1)
+        if(p1->co_[i].x_ == p1->co_[i + 1].x_ && p1->co_[i].y_ == p1->co_[i + 1].y_ - 1)
         {
             count++;
         }
@@ -495,46 +507,39 @@ void RemoveAllLine(PixelPoint* targetImg)
         {
             if(count > 30)
             {
-                RemoveLines(targetImg->co_,count,i-count);
+                RemoveLines(p1->co_,count,i-count);
+                
             }
             count = 0;
         }
     }
-    SortY(targetImg);
-    for(int i=0;i<(int)targetImg->size_;i++)
+    SortY(p2);
+    for(uint32_t i=0;i<targetImg->size_;i++)
     {
-        if(targetImg->co_[i].y_ == targetImg->co_[i + 1].y_ && targetImg->co_[i].x_ == targetImg->co_[i + 1].x_ - 1)
+        if(p2->co_[i].y_ == p2->co_[i + 1].y_ && p2->co_[i].x_ == p2->co_[i + 1].x_ - 1)
         {
             count++;
-            if(targetImg->co_[i].x_==0 && targetImg->co_[i].y_==0)return;
         }
         else
         {
             if(count > 30)
             {
                 
-                RemoveLines(targetImg->co_,count,i-count);
+                RemoveLines(p2->co_,count,i-count);
+                
             }
             count = 0;
         }
     }
+    SortY(p1);
+    SortY(p2);
+    KeepCommonPoints(targetImg,p1,p2);
+    FreePoint(&p1);
+    FreePoint(&p2);
 }
 void RemoveLineHandle(PixelPoint* targetImg)
 {
-    uint16_t count=0;
-    RemoveAllLine(targetImg);
     
-    FILE *file = fopen("./RemoveLine.txt", "w");
-    if (file == NULL) {
-        printf("Error opening file!\n");
-        return;
-    }
-    for (int x = 0;x<targetImg->size_; x++)
-    {
-        if(targetImg->co_[x].x_!=0 && targetImg->co_[x].y_!=0)
-        {
-            fprintf(file, "%d,%d\n",targetImg->co_[x].x_,targetImg->co_[x].y_);
-        }
-    }
-    fclose(file);
+    RemoveAllLine(targetImg);
+    //FindRound(targetImg);
 }

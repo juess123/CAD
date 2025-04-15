@@ -1,2 +1,3 @@
 x86_64-w64-mingw32-gcc -shared -o C.dll main.c frame.c detectLine.c algorithm.c markingLine.c -static  //c linux -> python windows
 gcc -shared -fPIC -o C.so main.c frame.c detectLine.c algorithm.c markingLine.c                        //c linux -> python linux
+valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./my_program                      //Memory Testing Tool of C
